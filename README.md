@@ -1,5 +1,7 @@
 # TinyFPGA BX USB Serial
 
+![](usb_ser_ice40_detail.png)
+
 ## Origins
 
 Luke Valenti's USB module, as adapted by Lawrie Griffiths and others.  Luke's code was created with the purpose of providing a "bit banged" USB port to SPI bridge for his (awesome) TinyFPGA boards.
@@ -137,6 +139,53 @@ assign pin_pu = 1'b1;
 
 There are two pipeline interfaces to the module, `uart_in` and `uart_out`.  The former being a pipeline *sender* and the latter being a pipeline *receiver*.  These can just be tied together (as they are in this project) to create a UART loopback.
 
+## Use
+
+Development has been done on Ubuntu.  
+
+Clone the repo
+
+```
+git clone git@github.com:davidthings/tinyfpga_bx_usbserial.git
+```
+
+and enter the directory
+
+`cd tinyfpga_bx_usbserial`
+
+And make it!
+
+`make`
+
+The make process has got to do a few things so it may take a minute.
+
+If it completes successfully, press the "program" button on the TinyFPGA BX and program it
+
+`make prog`
+
+If all went well, you will then see a new port which you can connect to with a serial terminal emulator (on Ubuntu a good one is **gtkterminal**).  Characters typed are rather unspectacularly echo'ed back.
+
+`make gui`
+
+Let's you perform the place and route manually and generate pretty pictures like the one at the top.  And this one.
+
+![](usb_ser_ice40.png)
+
+## Dependencies
+
+Nothing is required beyond the usual tools needed for TinyFPGA development.  This is a command-line makefile project.  
+
+**Icestorm**
+
+http://www.clifford.at/icestorm/
+
+Make sure you get NextPNR.
+
+**TinyFPGA BX**
+
+https://tinyfpga.com/bx/guide.html
+
+
 ## Issues
 
 **32 Byte transfer limit**
@@ -154,3 +203,7 @@ Here's a taste.  Consider a pipeline module, m with both upstream and downstream
 Mr ZipCPU talks about pipelining a lot here - https://zipcpu.com/blog/2017/08/14/strategies-for-pipelining.html . He uses "STB" and "Busy" as his signals, but his development of the subject is pretty nice.
 
 Feel free to use this interface, or put another one on it!
+
+**Accuracy / Mistakes / Etc.**
+
+Please feel free to suggest fixes / improvements / changes.  
