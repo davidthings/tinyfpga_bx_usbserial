@@ -1,0 +1,11 @@
+set_io pin_led   B3
+set_io pin_usb_p B4
+set_io pin_usb_n A4
+set_io pin_pu    A3
+set_io pin_clk   B2
+
+# Your debug pins might be different
+set_io --warn-no-port debug[0] H9   # Pin_14
+set_io --warn-no-port debug[1] D9   # Pin_15
+set_io --warn-no-port debug[2] D8   # Pin_16
+set_io --warn-no-port debug[3] C9   # Pin_17
