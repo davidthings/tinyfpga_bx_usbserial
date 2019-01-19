@@ -8,7 +8,7 @@ Luke Valenti's USB module, as adapted by Lawrie Griffiths and others.  Luke's co
 
 The original is here - https://github.com/tinyfpga/TinyFPGA-Bootloader
 
-Lawrie Griffiths dug into the dark innards of this code - https://github.com/lawrie/tiny_usb_examples  and did the bulk of the work to change it to being a USB - SERIAL bridge, looking to the user like a serial port, rather than an SPI master.
+Lawrie Griffiths dug into the dark innards of this code and did the bulk of the work to change it to being a USB - SERIAL bridge, looking to the user like a serial port, rather than an SPI master.  His work is here - https://github.com/lawrie/tiny_usb_examples 
 
 However there were a couple of problems:
 - arachne-pnr would give spotty results, sometimes not working at all.  This is easy to understand when considering that arachne-pnr *does not place in such a way as to minimize timings!*  NextNPR is a must.
