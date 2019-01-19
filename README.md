@@ -189,12 +189,11 @@ Make sure you get NextPNR.
 
 https://tinyfpga.com/bx/guide.html
 
-
 ## Issues
 
 **32 Byte transfer limit**
 
-The code presented works at full speed, transferring data at 48Mhz, but somewhere in the USB code, there is a limit placed which makes any attempts to transfer more than 32 bytes at a time fail.  This limit is fine for some applications, but obviously not for others.  If someone out there knows more about USB, please feel free to help fix this.
+The code presented works at full speed, transferring data at 48Mhz, but somewhere in the USB code, something makes any attempts to transfer more than 32 bytes at a time fail.  This limit is fine for some applications, but obviously not for others.  If someone out there knows more about USB, please feel free to help fix this.
 
 **Pipeline Interface**
 
@@ -207,6 +206,10 @@ Here's a taste.  Consider a pipeline module, m with both upstream and downstream
 Mr ZipCPU talks about pipelining a lot here - https://zipcpu.com/blog/2017/08/14/strategies-for-pipelining.html . He uses "STB" and "Busy" as his signals, but his development of the subject is pretty nice.
 
 Feel free to use this interface, or put another one on it!
+
+**Command Line**
+
+There are rumors that some people don't like command-line tools.  If you (or a friend) think you might be one of these people, please feel free to connect this project to your other fancy environment (Apio, PlatformIO) and submit the appropriate files so others may experience these delights.
 
 **Accuracy / Mistakes / Etc.**
 
