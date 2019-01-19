@@ -34,12 +34,12 @@ module usb_uart_i40 (
   inout  pin_usb_p,
   inout  pin_usb_n,
 
-  // uart pipeline in (out of the device, into the host)
+  // uart pipeline in (into the module, out of the device, into the host)
   input [7:0] uart_in_data,
   input       uart_in_valid,
   output      uart_in_ready,
 
-  // uart pipeline out (into the device, out of the host)
+  // uart pipeline out (out of the host, into the device, out of the module)
   output [7:0] uart_out_data,
   output       uart_out_valid,
   input        uart_out_ready,
