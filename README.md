@@ -34,6 +34,8 @@ Info: 	        ICESTORM_PLL:     1/    2    50%
 Info: 	         SB_WARMBOOT:     0/    1     0%
 ```
 
+Technically, it is failing timing.  NextPNR reports that the critical path is the clock signal and that the design isn't guaranteed to run faster than 38.30MHz.   We're running a good bit faster than that but it seems to work.  Perhaps there's a simple fix for this?  Is is common to have the clock be the critical path?  I thought that the clock was the thing that was used to determine the critical path.  Not sure here.
+
 **Interface**
 
 The interface to the code looks like the following:
