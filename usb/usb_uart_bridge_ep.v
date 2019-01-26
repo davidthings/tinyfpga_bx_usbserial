@@ -17,15 +17,23 @@
 
     To get data in and out there are two pipeline interfaces - one in and one out.
 
+    OUT (or into this device)
+
+    Roughly, the USB innards signal that a packet has arrived by raising out_ep_data_available.
+    The data multiplexor has to be switched, so the interface is requested.  This is
+    combinatorial logic so clever req and grant stuff can happen in the same line.
+
+         assign out_ep_req = ( out_ep_req_reg || out_ep_data_avail );
+
+    With the interface granted, the data is free to get.  Every cycle that the out_ep_data_get
+    signal is high, the input address is advanced.  Inside the USB innards, when the 
+    read address pointer equals the address of the write pointer (when all the data is 
+    retreived, the out_ep_data_available flag is lowered and we withdraw our request for
+    the interface and go back to idle.
+
+    Interestingly, if you stop taking data... you lose your buffer.  So don't.
+
     ToDo
-
-    The arbitration code to mux the senders and receivers is combinatorial logic,
-    not latched, so a cycle doesn't need to be spent on them.
-
-        wire uart_byte_out_xfr_ready = out_ep_grant && out_ep_data_avail;
-        wire uart_byte_in_xfr_ready = in_ep_grant && in_ep_data_free;
-
-    We can just test this one thing.  Note this means we do not have to release it.
 
     In the original, endpoints are used to read and write at the same time (SPI traffic)
     so it is certainly possible.  It looks like they're even doing single cycle
@@ -44,9 +52,9 @@ module usb_uart_bridge_ep (
   ////////////////////
   output out_ep_req,               // request the data interface for the out endpoint
   input out_ep_grant,              // data interface granted
-  input out_ep_data_avail,         // flagging data available to get from the host
+  input out_ep_data_avail,         // flagging data available to get from the host - stays up until the cycle upon which it is empty
   input out_ep_setup,              // [setup packet sent? - not used here]
-  output out_ep_data_get,          // request to get the data - note this takes 2 cycles
+  output out_ep_data_get,          // request to get the data
   input [7:0] out_ep_data,         // data from the host
   output out_ep_stall,             // an output enabling the device to stop inputs
   input out_ep_acked,              // indicating that the outgoing data was acked
@@ -90,30 +98,31 @@ module usb_uart_bridge_ep (
   reg       out_ep_data_get_reg;
 
   // out pipeline / out endpoint state machine state (6 states -> 3 bits)
-  reg [2:0] pipeline_out_state;
+  reg [1:0] pipeline_out_state;
 
   localparam PipelineOutState_Idle         = 0;
   localparam PipelineOutState_WaitData     = 1;
-  localparam PipelineOutState_GetData      = 2;
-  localparam PipelineOutState_PushData     = 3;
-  localparam PipelineOutState_Overflow     = 4;
-  localparam PipelineOutState_WaitPipeline = 5;
+  localparam PipelineOutState_PushData     = 2;
+  localparam PipelineOutState_WaitPipeline = 3;
 
   // connect the pipeline registers to the outgoing pins
   assign uart_out_data = uart_out_data_reg;
   assign uart_out_valid = uart_out_valid_reg;
 
-  // connect the end point registers to the outgoing pins
+  // automatically make the bus request from the data_available
+  // latch it with out_ep_req_reg
   assign out_ep_req = ( out_ep_req_reg || out_ep_data_avail );
 
   wire out_granted_data_available;
 
   assign out_granted_data_available = out_ep_req && out_ep_grant;
 
-  assign out_ep_data_get = out_ep_data_get_reg;
+  assign out_ep_data_get = ( uart_out_ready || ~uart_out_valid_reg ) && out_ep_data_get_reg;
 
-  // Handle the bus requesting and granting combinatorially
-  // ... someday
+  // 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
+
+  reg [7:0] out_stall_data;
+  reg       out_stall_valid;
 
   // do HOST OUT, DEVICE IN, PIPELINE OUT (!)
   always @(posedge clk) begin
@@ -123,56 +132,64 @@ module usb_uart_bridge_ep (
           uart_out_valid_reg <= 0;
           out_ep_req_reg <= 0;
           out_ep_data_get_reg <= 0;
+          out_stall_data <= 0;
+          out_stall_valid <= 0;
       end else begin
           case( pipeline_out_state )
               PipelineOutState_Idle: begin
-                  // waiting for pipeline ready and waiting for a character and bus granted
+                  // Waiting for the data_available signal indicating that a data packet has arrived
                   if ( out_granted_data_available ) begin
+                      // indicate that we want the data
                       out_ep_data_get_reg <= 1;
+                      // although the bus has been requested automatically, we latch the request so we control it
                       out_ep_req_reg <= 1;
                       // now wait for the data to set up
                       pipeline_out_state <= PipelineOutState_WaitData;
+                      uart_out_valid_reg <= 0;
+                      out_stall_data <= 0;
+                      out_stall_valid <= 0;
                   end
               end
               PipelineOutState_WaitData: begin
-                  uart_out_valid_reg <= 0;
                   // it takes one cycle for the juices to start flowing
-                  pipeline_out_state <= PipelineOutState_PushData;
-              end
-              // PipelineOutState_GetData: begin
-              //     uart_out_data_reg <= out_ep_data;
-              //     uart_out_valid_reg <= 1;
-              //     pipeline_out_state <= PipelineOutState_PushData;
-              // end
-              PipelineOutState_PushData: begin
-                  // now we really have got some data
-                  uart_out_data_reg <= out_ep_data;
-                  uart_out_valid_reg <= 1;
-                  // But what's next?
-                  if ( uart_out_ready ) begin
-                      // We continue!
-                      // but what if there's no more?
-                      if ( ~out_ep_data_avail ) begin
-                          // stop streaming, now just going to wait until the character is accepted
-                          out_ep_data_get_reg <= 0;
+                  // we got here when we were starting or if the outgoing pipe stalled
+                  if ( uart_out_ready || ~uart_out_valid_reg ) begin
+                      //if we were stalled, we can send the byte we caught while we were stalled
+                      // the actual stalled byte now having been VALID & READY'ed
+                      if ( out_stall_valid ) begin
+                        uart_out_data_reg <= out_stall_data;
+                        uart_out_valid_reg <= 1;
+                        out_stall_data <= 0;
+                        out_stall_valid <= 0;
+                        if ( out_ep_data_avail )
+                          pipeline_out_state <= PipelineOutState_PushData;
+                        else begin
                           pipeline_out_state <= PipelineOutState_WaitPipeline;
-                      end
-                  end else begin
-                      // hold the sender up
-                      out_ep_data_get_reg <= 0;
-                      // go to overflow state
-                      if ( ~out_ep_data_avail ) begin
-                          pipeline_out_state <= PipelineOutState_WaitPipeline;
+                        end
                       end else begin
-                          pipeline_out_state <= PipelineOutState_Overflow;
+                          pipeline_out_state <= PipelineOutState_PushData;
                       end
                   end
               end
-              PipelineOutState_Overflow: begin
-                  if ( uart_out_ready ) begin
-                      uart_out_valid_reg <= 0;
-                      out_ep_data_get_reg <= 1;
-                      pipeline_out_state <= PipelineOutState_PushData;
+              PipelineOutState_PushData: begin
+                  // can grab a character if either the out was accepted or the out reg is empty
+                  if ( uart_out_ready || ~uart_out_valid_reg ) begin
+                    // now we really have got some data and a place to shove it
+                    uart_out_data_reg <= out_ep_data;
+                    uart_out_valid_reg <= 1;
+                    if ( ~out_ep_data_avail ) begin
+                        // stop streaming, now just going to wait until the character is accepted
+                        out_ep_data_get_reg <= 0;
+                        pipeline_out_state <= PipelineOutState_WaitPipeline;
+                    end
+                  end else begin
+                    // We're in push data so there is a character, but our pipeline has stalled
+                    // need to save the character and wait.
+                    out_stall_data <= out_ep_data;
+                    out_stall_valid <= 1;
+                    pipeline_out_state <= PipelineOutState_WaitData;                     
+                    if ( ~out_ep_data_avail )
+                        out_ep_data_get_reg <= 0;
                   end
               end
               PipelineOutState_WaitPipeline: begin
@@ -180,6 +197,7 @@ module usb_uart_bridge_ep (
                   out_ep_req_reg <= 0;
                   if ( uart_out_ready ) begin
                       uart_out_valid_reg <= 0;
+                      uart_out_data_reg <= 0;
                       pipeline_out_state <= PipelineOutState_Idle;
                   end
 
@@ -188,6 +206,9 @@ module usb_uart_bridge_ep (
           endcase
       end
   end
+
+  assign debug = { uart_out_ready, uart_out_valid, uart_out_data_reg[ 0 ], out_ep_data[ 0 ] /*, out_ep_data_avail*/ };  // this has worked (port there... missing some daata?)
+
 
   reg [7:0] pipeline_in_data;
 
@@ -203,15 +224,16 @@ module usb_uart_bridge_ep (
   // in pipeline / in endpoint state machine state (5 states -> 3 bits)
   reg [2:0] pipeline_in_state;
 
-  localparam PipelineInState_InHoldOff = 0;
-  localparam PipelineInState_Idle      = 1;
-  localparam PipelineInState_WaitBus   = 2;
-  localparam PipelineInState_WaitData  = 3;
-  localparam PipelineInState_CycleData = 4;
-  localparam PipelineInState_WaitEP    = 5;
+  localparam PipelineInState_Idle      = 0;
+  localparam PipelineInState_WaitBus   = 1;
+  localparam PipelineInState_WaitData  = 2;
+  localparam PipelineInState_CycleData = 3;
+  localparam PipelineInState_WaitEP    = 4;
 
   // connect the pipeline register to the outgoing pin
-  assign uart_in_ready = uart_in_ready_reg;
+  // assign uart_in_ready = uart_in_ready_reg;
+  // Cheat!  Use the USB UART state
+  assign uart_in_ready = in_granted_in_valid;
 
   // connect the end point registers to the outgoing pins
   assign in_ep_req = ( uart_in_valid && in_ep_data_free ) || in_ep_req_reg;
@@ -222,38 +244,34 @@ module usb_uart_bridge_ep (
   assign in_ep_data_done = in_ep_data_done_reg;
   assign in_ep_data = in_ep_data_reg;
 
+  // 4 bits of counter, we'll just count up until bit 3 is high... 8 clock cycles seems more than enough to wait
+  // to send the packet
+  reg [3:0] in_ep_timeout;
+
   //eg uart_in_valid_fake;
-  reg [12:0] in_hold_off;
 
   // do PIPELINE IN, Device OUT, Host IN
   always @(posedge clk) begin
       //uart_in_valid_fake <= 0;
       if ( reset ) begin
-          // pipeline_in_state <= PipelineInState_Idle;
-          pipeline_in_state <= PipelineInState_InHoldOff;
-          // pipeline_in_data <= 0;
+          pipeline_in_state <= PipelineInState_Idle;
           uart_in_ready_reg <= 0;
           in_ep_req_reg <= 0;
           in_ep_data_put_reg <= 0;
           in_ep_data_done_reg <= 0;
           in_ep_data_reg <= 0;
-          in_hold_off <= 0;
       end else begin
           case( pipeline_in_state )
-              PipelineInState_InHoldOff:  begin
-              uart_in_ready_reg <= 0;
-                in_hold_off <= in_hold_off + 1;
-                if ( in_hold_off[ 12 ] )
-                    pipeline_in_state <= PipelineInState_Idle;
-              end
               PipelineInState_Idle: begin
-                  uart_in_ready_reg <= 1;
                   in_ep_data_done_reg <= 0;
-                  // what if the bus was NOT granted... need to catch the lost char
                   if ( in_granted_in_valid  ) begin
+                      // got the bus, now do the data
+
                       // confirm request bus - this will hold the request up until we're done with it
                       in_ep_req_reg <= 1;
 
+                      // start grabbing data
+                      uart_in_ready_reg <= 1;
                       // data is valid
                       in_ep_data_reg <= uart_in_data;
                       in_ep_data_put_reg <= 1;
@@ -262,9 +280,7 @@ module usb_uart_bridge_ep (
                   end
               end
               PipelineInState_CycleData: begin
-
                   if  (uart_in_valid ) begin
-                      // got the bus put data
                       // data is valid
                       in_ep_data_reg <= uart_in_data;
 
@@ -274,23 +290,40 @@ module usb_uart_bridge_ep (
 
                           in_ep_data_put_reg <= 1;
 
-                          // no need to "DONE" now
+                          // "DONE" now
                           in_ep_data_done_reg <= 1;
 
                           pipeline_in_state <= PipelineInState_WaitEP;
                       end
-
                   end else begin
-                      // signal that we're now done reading / writing
-                      uart_in_ready_reg <= 0;
-
+                      // No valid character.  Let's just pause for a second to see if any more are forthcoming.
                       in_ep_data_put_reg <= 0;
 
-                      in_ep_data_done_reg <= 1;
+                      // clear the timeout counter
+                      in_ep_timeout <= 0;
 
-                      pipeline_in_state <= PipelineInState_WaitEP;
+                      pipeline_in_state <= PipelineInState_WaitData;
                  end
               end
+
+              PipelineInState_WaitData: begin
+                  in_ep_timeout <= in_ep_timeout + 1;
+                  if ( uart_in_valid ) begin
+                      // a character!
+                      in_ep_data_reg <= uart_in_data;
+                      in_ep_data_put_reg <= 1;
+                      pipeline_in_state <= PipelineInState_CycleData;                
+                  end else begin
+                        // check for a timeout
+                        if ( in_ep_timeout[ 3 ] ) begin
+                            uart_in_ready_reg <= 0;
+                            in_ep_data_put_reg <= 0;
+                            in_ep_data_done_reg <= 1;
+                            pipeline_in_state <= PipelineInState_WaitEP;
+                        end
+                  end
+              end
+
               PipelineInState_WaitEP: begin
                   in_ep_data_put_reg <= 0;
                   in_ep_data_done_reg <= 0;
@@ -303,35 +336,5 @@ module usb_uart_bridge_ep (
           endcase
       end
   end
-
-
-  // Debug port
-  // output debug data
-  // assign debug = { /*in_ep_data_done,*/ in_ep_data_put_reg, in_ep_req_reg, uart_in_valid, uart_in_ready };  // this has worked GREAT
-  // in & pipeline debug data
-  // assign debug = { uart_in_valid, uart_out_valid_reg, out_ep_data_get_reg, out_ep_data_avail };
-  // in debug data
-  // assign debug = { uart_out_ready, out_ep_data_get, out_ep_grant, out_ep_data_avail }; // unhappy
-  // (worked) assign debug = { 1'b0, out_ep_data_get, out_ep_grant, out_ep_data_avail };
-  // assign debug = { uart_in_ready, out_ep_data_get, out_ep_grant, out_ep_data_avail };  // this has worked (port there... missing some daata?)
-  // assign debug = 0;  // this has worked (port there... missing some daata?) // this has also resulted in no port
-
-  // assign debug = { /*in_ep_data_done,*/ in_ep_data_put_reg, in_ep_req_reg, uart_in_valid, uart_in_ready }; // works great
-  // assign debug = { /*in_ep_data_done,*/ in_ep_data_put_reg, in_ep_req_reg, uart_in_valid, 1'b0 }; // works great
-  // assign debug = { /*in_ep_data_done,*/ in_ep_data_put_reg, in_ep_req_reg, 2'b00 }; // works great
-  // assign debug = { /*in_ep_data_done,*/ in_ep_data_put_reg, 3'b000 };   // works great
-  //  assign debug = {  out_ep_req_reg, out_ep_data_avail, reset, clk };
-  // assign debug = {  4'b0000 }; // No serial port
-  // assign debug = {  1'b0, pipeline_in_state };  // works great
-
-  // post creating debug buffers.
-  // assign debug = {  pipeline_out_state };
-  // assign debug = {  4'b0000 }; // Serial port! Data a little crappy (glitch on full)
-
-  // post fixing the loops (nothing works!)
-
-  // assign debug = { 1'b0, uart_out_valid_reg, out_ep_req, out_ep_data_avail };
-  assign debug = { 1'b0, uart_out_valid_reg, out_granted_data_available, out_ep_data_avail };
-
 
 endmodule

@@ -17,7 +17,8 @@ module usb_fs_out_pe #(
   output reg [7:0] out_ep_data,
   input [NUM_OUT_EPS-1:0] out_ep_stall,
   output reg [NUM_OUT_EPS-1:0] out_ep_acked = 0,
-
+  // Added to provide a more constant way of detecting the current OUT EP than data get
+  input [NUM_OUT_EPS-1:0] out_ep_grant,
 
   ////////////////////
   // rx path
@@ -207,6 +208,7 @@ module usb_fs_out_pe #(
           endcase
         end
 
+        // Determine the next get_address (init, inc, maintain)
         if (ep_state_next[ep_num][1:0] == READY_FOR_PKT) begin
           ep_get_addr_next[ep_num][5:0] <= 0;
         end else if (ep_state_next[ep_num][1:0] == GETTING_PKT && out_ep_data_get[ep_num]) begin
@@ -214,8 +216,10 @@ module usb_fs_out_pe #(
         end else begin
           ep_get_addr_next[ep_num][5:0] <= ep_get_addr[ep_num][5:0];
         end
-      end
 
+      end  // end of the always @*
+
+      // Advance the state to the next one.
       always @(posedge clk) begin
         if (reset || reset_ep[ep_num]) begin
           ep_state[ep_num] <= READY_FOR_PKT;
@@ -257,13 +261,13 @@ module usb_fs_out_pe #(
   end
 
   always @(posedge clk) out_ep_data <= out_data_buffer[buffer_get_addr][7:0];
-
+  // use the bus grant line to determine the out_ep_num (where the data is)
   integer ep_num_decoder;
   always @* begin
     out_ep_num <= 0;
 
     for (ep_num_decoder = 0; ep_num_decoder < NUM_OUT_EPS; ep_num_decoder = ep_num_decoder + 1) begin
-      if (out_ep_data_get[ep_num_decoder]) begin
+      if (out_ep_grant[ep_num_decoder]) begin
         out_ep_num <= ep_num_decoder;
       end
     end

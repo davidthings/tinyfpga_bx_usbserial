@@ -168,6 +168,7 @@ module usb_fs_pe #(
     .out_ep_setup(out_ep_setup),
     .out_ep_stall(out_ep_stall),
     .out_ep_acked(out_ep_acked),
+    .out_ep_grant(out_ep_grant),
 
     // rx path
     .rx_pkt_start(rx_pkt_start),
