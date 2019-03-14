@@ -63,7 +63,9 @@ module usb_fs_pe #(
   input  usb_p_rx,
   input  usb_n_rx,
 
-  output usb_tx_en
+  output usb_tx_en,
+
+  output [7:0] debug
 );
   // in pe interface
   wire [7:0] arb_in_ep_data;
@@ -150,7 +152,9 @@ module usb_fs_pe #(
     .tx_pid(in_tx_pid),
     .tx_data_avail(tx_data_avail),
     .tx_data_get(tx_data_get),
-    .tx_data(tx_data)
+    .tx_data(tx_data),
+
+    .debug(debug)
   );
 
   usb_fs_out_pe #(

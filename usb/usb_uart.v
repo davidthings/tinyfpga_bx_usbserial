@@ -145,7 +145,7 @@ module usb_uart (
   output       uart_out_valid,
   input        uart_out_ready,
 
-  output [3:0] debug
+  output [11:0] debug
 );
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -261,7 +261,7 @@ module usb_uart (
     .uart_out_valid( uart_out_valid ),
     .uart_out_ready( uart_out_ready ),
 
-    .debug(debug)
+    .debug(debug[3:0])
   );
 
   wire nak_in_ep_grant;
@@ -305,7 +305,10 @@ module usb_uart (
 
     // sof interface
     .sof_valid(sof_valid),
-    .frame_index(frame_index)
+    .frame_index(frame_index),
+
+    // Debug
+    .debug(debug[11:4])
   );
 
 

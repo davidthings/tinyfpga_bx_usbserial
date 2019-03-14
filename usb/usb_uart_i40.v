@@ -34,17 +34,17 @@ module usb_uart_i40 (
   inout  pin_usb_p,
   inout  pin_usb_n,
 
-  // uart pipeline in (into the module, out of the device, into the host)
+  // uart pipeline in (out of the device, into the host)
   input [7:0] uart_in_data,
   input       uart_in_valid,
   output      uart_in_ready,
 
-  // uart pipeline out (out of the host, into the device, out of the module)
+  // uart pipeline out (into the device, out of the host)
   output [7:0] uart_out_data,
   output       uart_out_valid,
   input        uart_out_ready,
 
-  output [3:0] debug
+  output [11:0] debug
 );
 
     wire usb_p_tx;
@@ -53,7 +53,7 @@ module usb_uart_i40 (
     wire usb_n_rx;
     wire usb_tx_en;
 
-    wire [3:0] debug;
+    //wire [3:0] debug;
 
     usb_uart uart (
         .clk_48mhz  (clk_48mhz),
@@ -84,6 +84,18 @@ module usb_uart_i40 (
 
     assign usb_p_rx = usb_tx_en ? 1'b1 : usb_p_in;
     assign usb_n_rx = usb_tx_en ? 1'b0 : usb_n_in;
+
+/* Note this is nicer, but is it clearer?
+  
+  SB_IO #(
+    .PIN_TYPE(6'b1010_01) // tristatable output
+  ) buffer [1:0](
+    .OUTPUT_ENABLE(usb_tx_en),
+    .PACKAGE_PIN({pin_usbn, pin_usbp}),
+    .D_IN_0({usb_n_rx_io, usb_p_rx_io}),
+    .D_OUT_0({usb_n_tx, usb_p_tx})
+  );
+*/
 
     SB_IO #(
         .PIN_TYPE(6'b 1010_01), // PIN_OUTPUT_TRISTATE - PIN_INPUT

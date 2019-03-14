@@ -51,7 +51,9 @@ module usb_fs_in_pe #(
   // Data payload to send if any
   output tx_data_avail,
   input tx_data_get,
-  output reg [7:0] tx_data
+  output reg [7:0] tx_data,
+
+  output [7:0] debug
 );
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -70,7 +72,7 @@ module usb_fs_in_pe #(
   localparam GETTING_PKT = 2;
   localparam STALL = 3;
 
-
+  assign debug[1:0] = ( current_endp == 1 ) ? current_ep_state : 0;
 
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -84,16 +86,20 @@ module usb_fs_in_pe #(
   reg [1:0] in_xfr_state = IDLE;
   reg [1:0] in_xfr_state_next;
 
+  assign debug[3:2] = ( current_endp == 1 ) ? in_xfr_state : 0;
 
   reg in_xfr_start = 0;
   reg in_xfr_end = 0;
 
+  assign debug[4] = tx_data_avail; 
+  assign debug[5] = tx_data_get; 
 
   // data toggle state
   reg [NUM_IN_EPS - 1:0] data_toggle = 0;
 
   // endpoint data buffer
   reg [7:0] in_data_buffer [(MAX_IN_PACKET_SIZE * NUM_IN_EPS) - 1:0];
+  // Address registers - one bit longer (6) than required (5) to permit fullness != emptyness
   reg [5:0] ep_put_addr [NUM_IN_EPS - 1:0];
   reg [5:0] ep_get_addr [NUM_IN_EPS - 1:0];
 
@@ -108,6 +114,7 @@ module usb_fs_in_pe #(
 
   reg [3:0] in_ep_num = 0;
 
+  // the actual address (note using only the real 5 bits of the incoming address + the high order buffer select)
   wire [8:0] buffer_put_addr = {in_ep_num[3:0], ep_put_addr[in_ep_num][4:0]};
   wire [8:0] buffer_get_addr = {current_endp[3:0], ep_get_addr[current_endp][4:0]};
 
@@ -116,7 +123,6 @@ module usb_fs_in_pe #(
 
   // endpoint has some space free in its buffer
   reg [NUM_IN_EPS - 1:0] endp_free = 0;
-
 
   wire token_received =
     rx_pkt_end &&
@@ -137,6 +143,10 @@ module usb_fs_in_pe #(
     rx_pkt_end &&
     rx_pkt_valid &&
     rx_pid == 4'b0010;
+
+  assign debug[ 6 ] = rx_pkt_start;
+  assign debug[ 7 ] = rx_pkt_end;
+  
 
   wire more_data_to_send =
     ep_get_addr[current_endp][5:0] < ep_put_addr[current_endp][5:0];
@@ -163,6 +173,8 @@ module usb_fs_in_pe #(
   genvar ep_num;
   generate
     for (ep_num = 0; ep_num < NUM_IN_EPS; ep_num = ep_num + 1) begin
+
+      // Manage next state
       always @* begin
         in_ep_acked[ep_num] <= 0;
 
@@ -178,21 +190,17 @@ module usb_fs_in_pe #(
             end
 
             PUTTING_PKT : begin
-              if (
-                (
-                  in_ep_data_done[ep_num]
-                ) || (
-                  ep_put_addr[ep_num][5]
-                )
-              ) begin
+              // if either the user says they're done or the buffer is full, move on to GETTING_PKT
+              if ( ( in_ep_data_done[ep_num] ) || ( ep_put_addr[ep_num][5] ) ) begin   
                 ep_state_next[ep_num] <= GETTING_PKT;
-
               end else begin
                 ep_state_next[ep_num] <= PUTTING_PKT;
               end
             end
 
             GETTING_PKT : begin
+              // here we're waiting to send the data out, and receive an ACK token back
+              // No token, and we're here for a while.
               if (in_xfr_end && current_endp == ep_num) begin
                 ep_state_next[ep_num] <= READY_FOR_PKT;
                 in_ep_acked[ep_num] <= 1;
@@ -221,6 +229,7 @@ module usb_fs_in_pe #(
         in_ep_data_free[ep_num] = endp_free[ep_num] && ep_state[ep_num] == PUTTING_PKT;
       end
 
+      // Handle the data pointer (advancing and clearing)
       always @(posedge clk) begin
         if (reset || reset_ep[ep_num]) begin
           ep_state[ep_num] <= READY_FOR_PKT;
@@ -230,11 +239,13 @@ module usb_fs_in_pe #(
 
           case (ep_state[ep_num])
             READY_FOR_PKT : begin
+              // make sure we start with a clear buffer (and the extra bit!)
               ep_put_addr[ep_num][5:0] <= 0;
             end
 
             PUTTING_PKT : begin
-              if (in_ep_data_put[ep_num]) begin
+              // each time we are putting, and there's a data_put signal, increment the address
+              if (in_ep_data_put[ep_num] && ( ~ep_put_addr[ep_num][5] ) ) begin
                 ep_put_addr[ep_num][5:0] <= ep_put_addr[ep_num][5:0] + 1;
               end
             end
@@ -250,6 +261,8 @@ module usb_fs_in_pe #(
     end
   endgenerate
 
+  // Decide which in_ep_num we're talking to
+  // Using the data put register is OK here
   integer ep_num_decoder;
   always @* begin
     in_ep_num <= 0;
@@ -261,6 +274,7 @@ module usb_fs_in_pe #(
     end
   end
 
+  // Handle putting the new data into the buffer
   always @(posedge clk) begin
     case (ep_state[in_ep_num])
       PUTTING_PKT : begin
@@ -298,7 +312,7 @@ module usb_fs_in_pe #(
         end
       end
 
-
+      // Got an IN token
       RCVD_IN : begin
         tx_pkt_start <= 1;
 
@@ -307,6 +321,7 @@ module usb_fs_in_pe #(
           tx_pid <= 4'b1110; // STALL
 
         end else if (ep_state[current_endp] == GETTING_PKT) begin
+          // if we were in GETTING_PKT (done getting data from the device), Send it!
           in_xfr_state_next <= SEND_DATA;
           tx_pid <= {data_toggle[current_endp], 3'b011}; // DATA0/1
           in_xfr_start <= 1;
@@ -317,8 +332,8 @@ module usb_fs_in_pe #(
         end
       end
 
-
       SEND_DATA : begin
+        // Send the data from the buffer now (until the out (get) address = the in (put) address)
         if (!more_data_to_send) begin
           in_xfr_state_next <= WAIT_ACK;
 
@@ -329,6 +344,7 @@ module usb_fs_in_pe #(
 
       WAIT_ACK : begin
         // FIXME: need to handle smash/timeout
+        // Could wait here forever (although another token will come along)
         if (ack_received) begin
           in_xfr_state_next <= IDLE;
           in_xfr_end <= 1;
