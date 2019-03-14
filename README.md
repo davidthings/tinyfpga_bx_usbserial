@@ -147,7 +147,7 @@ These can just be tied together (as they are in this project) to create a UART l
 
 ## Use
 
-Development has been done on Ubuntu.  
+Development has been done on Ubuntu.
 
 Clone the repo
 
@@ -169,7 +169,7 @@ If it completes successfully, press the "program" button on the TinyFPGA BX and 
 
 `make prog`
 
-If all went well, you will then see a new port which you can connect to with a serial terminal emulator (on Ubuntu the port is /dev/ttyACM0 and a good terminal program is **gtkterminal** since it doesn't seem to get upset if you forget to disconnect before reprogramming).  
+If all went well, you will then see a new port which you can connect to with a serial terminal emulator (on Ubuntu the port is /dev/ttyACM0 and a good terminal program is **gtkterminal** since it doesn't seem to get upset if you forget to disconnect before reprogramming).
 
 For this demo, characters typed are rather unspectacularly just echo'ed back.
 
@@ -181,7 +181,7 @@ Let's you perform the place and route manually and generate pretty pictures like
 
 ## Dependencies
 
-Nothing is required beyond the usual tools needed for TinyFPGA development.  This is a command-line makefile project.  
+Nothing is required beyond the usual tools needed for TinyFPGA development.  This is a command-line makefile project.
 
 **Icestorm**
 
@@ -193,13 +193,38 @@ Make sure you get NextPNR.
 
 https://tinyfpga.com/bx/guide.html
 
+## Debug
+
+There is some debug instrumentation left in the code.  This will just disappear if you don't use it.  For the Device Host bug, there were 16 lines connected to the hardware to present as much state as possible from the USB stack for debugging.  Here's one resulting screenshot where the interface is working to near capacity.
+
+![](usb_serial_deep_debug.png)
+
+- D0 - trigger (to send a 40-ish byte block if the last one was done)
+- D1 Pipeline Data[ 0 ] (toggles when presented with a sequence of odd-even data)
+- D2 Pipeline Valid - there is data available
+- D3 Pipeline Ready - the data can be accepted
+- D4 USB SERIAL IN State Machine[0] - controlling the pipeline from FPGA to Host (usb_uart_bridge_ep.v)
+- D5 USB SERIAL IN State Machine[1]
+- D6 `in_ep_data_done` (asserted when a partial outgoing buffer should be sent)
+- D7  `in_ep_data_free` (asserted while the usb serial sysyem can accept data)
+- D8 - EP State Machine[0] - `current_ep_state` (usb_fs_in_pe.v)
+- D9 - EP State Machine[1]
+- D10 - IN TX State Machine[0] - `in_xfr_state` (usb_fs_in_pe.v)
+- D11 - IN TX State Machine[1]
+- D12 - Bytes available to Tx - this indicates that there are bytes to send the USB transmitter
+- D13 - Byte to Tx - this is the strobe of the next byte into the USB transmitter
+- D14 - Receiver Message Start - the USB receiver has received a message start (an IN token or Ack here)
+- D15 - Receiver Message End - the USB receiver has received a message start (an IN token or Ack here)
+
+Overall, you can see the data source pipelining data (D1) into the buffer whenever the USB port is ready (D3).  When a buffer is full, the interface waits (EP State Machine D9,D8 = 1,0) until it gets an IN Token (D14,D15).  When this happens, the waiting buffer is sent as fast as the USB lines can send send them.  The interface waits for an ACK (D14,D15) and when all is well, signals up the stack that it's ready to fill another buffer.  And the cycle restarts.
+
 ## Issues
 
 **Pipeline Interface**
 
 Run slowly, the pipeline is pretty simple.  Data is available (`valid`), receiver (signaling `ready`) receives it.  Wait.  Repeat.  You can certainly use it in a simple way by de-asserting `ready` every cycle forcing the interface into a two step (`valid` `ready`, `valid` `~ready`).  The logic to do this is pretty simple.
 
-Where the pipeline shines is when data is streaming - one in, one out every clock cycle, (as happens in multibyte transfers), but for a simple seeming interface, a pipeline like this can be *fiendishly* complex to implement.  Implementers *must* have a firm grasp on their `=`'s vs `<=`'s, know their `always @(*)`'s from their `always @(posedge clk)`'s, and really understand combinatorial vs registered signals.  
+Where the pipeline shines is when data is streaming - one in, one out every clock cycle, (as happens in multibyte transfers), but for a simple seeming interface, a pipeline like this can be *fiendishly* complex to implement.  Implementers *must* have a firm grasp on their `=`'s vs `<=`'s, know their `always @(*)`'s from their `always @(posedge clk)`'s, and really understand combinatorial vs registered signals.
 
 Here's a taste.  Consider a pipeline module, m with both upstream and downstream communicating partners.  The main area of complexity happens when data is streaming (`valid` and `ready` are asserted by all).  Every clock, data is flowing from the upstream module into m, and from m into the downstream module below it. Suddenly the downstream module gets busy or is itself held up for some reason and it lowers `ready`.  When this happens module m has to latch the data that it is currently sending (since data is transferred only when *both* parties agree), hold `valid` high and wait.  Meanwhile the upstream module's data *was considered transfered*.  So the poor module m in the middle has to both latch its data word and store the new overflow one and just hang out.  Then when the downstream module finally signals that it's ready (raising the `ready` line), module m first needs to give it the original data, then the stored overflow data, and only then can it start accepting data again (raising its `ready` to the upstream module).  Getting all this in your head and implemented correctly can take days (or weeks)
 
@@ -213,13 +238,13 @@ There are rumors that some people don't like command-line tools.  If you (or a f
 
 **Accuracy / Mistakes / Etc.**
 
-Please feel free to suggest fixes / improvements / changes.  
+Please feel free to suggest fixes / improvements / changes.
 
 ## Fixed Issues
 
 **Device-Host Bug**
 
-If the device sent data when the host was not ready bad things happened.  If the device sent more than 32 bytes in a single burst bad things happened. Only good things happen now from single bytes up to streams almost at link capacity.
+If the device sent data when the host was not ready, bad things happened.  If the device sent more than 32 bytes in a single burst, bad things happened. Only good things happen now from single bytes up to streams almost at link capacity.
 
 **32 Character Bug**
 
