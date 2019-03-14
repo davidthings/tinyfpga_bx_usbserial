@@ -217,6 +217,10 @@ Please feel free to suggest fixes / improvements / changes.
 
 ## Fixed Issues
 
+**Device-Host Bug**
+
+If the device sent data when the host was not ready bad things happened.  If the device sent more than 32 bytes in a single burst bad things happened. Only good things happen now from single bytes up to streams almost at link capacity.
+
 **32 Character Bug**
 
 Turns out that was all me.  Fixed now.
