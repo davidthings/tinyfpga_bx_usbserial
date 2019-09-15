@@ -4,6 +4,8 @@
   Simple wrapper around the usb_uart which incorporates the Pin driver logic
   so this doesn't clutter the top level circuit
 
+  The layer above has to assert the Host Pull Up line
+
   ----------------------------------------------------
   usb_uart_i40 u_u_i40 (
     .clk_48mhz  (clk_48mhz),
@@ -26,7 +28,7 @@
 
 */
 
-module usb_uart_i40 (
+module usb_uart (
   input  clk_48mhz,
   input reset,
 
@@ -55,7 +57,7 @@ module usb_uart_i40 (
 
     //wire [3:0] debug;
 
-    usb_uart uart (
+    usb_uart_core uart (
         .clk_48mhz  (clk_48mhz),
         .reset      (reset),
 
@@ -84,18 +86,6 @@ module usb_uart_i40 (
 
     assign usb_p_rx = usb_tx_en ? 1'b1 : usb_p_in;
     assign usb_n_rx = usb_tx_en ? 1'b0 : usb_n_in;
-
-/* Note this is nicer, but is it clearer?
-  
-  SB_IO #(
-    .PIN_TYPE(6'b1010_01) // tristatable output
-  ) buffer [1:0](
-    .OUTPUT_ENABLE(usb_tx_en),
-    .PACKAGE_PIN({pin_usbn, pin_usbp}),
-    .D_IN_0({usb_n_rx_io, usb_p_rx_io}),
-    .D_OUT_0({usb_n_tx, usb_p_tx})
-  );
-*/
 
     SB_IO #(
         .PIN_TYPE(6'b 1010_01), // PIN_OUTPUT_TRISTATE - PIN_INPUT
