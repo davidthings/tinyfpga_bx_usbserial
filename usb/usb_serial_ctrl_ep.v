@@ -91,7 +91,8 @@ module usb_serial_ctrl_ep #(
 
   wire setup_pkt_start = pkt_start && out_ep_setup;
 
-  wire has_data_stage = wLength != 16'b0000000000000000;
+  // wire has_data_stage = wLength != 16'b0000000000000000; // this version for some reason causes a 16b carry which is slow
+  wire has_data_stage = |wLength;
 
   wire out_data_stage;
   assign out_data_stage = has_data_stage && !bmRequestType[7];
@@ -104,7 +105,7 @@ module usb_serial_ctrl_ep #(
 
   wire all_data_sent =
     (bytes_sent >= rom_length) ||
-    (bytes_sent >= wLength);
+    (bytes_sent >= wLength[7:0]); // save it from the full 16b
 
   wire more_data_to_send =
     !all_data_sent;
@@ -385,7 +386,7 @@ module usb_serial_ctrl_ep #(
       'h01F : in_ep_data <= 1; // bNumEndpoints
       'h020 : in_ep_data <= 2; // bInterfaceClass (Communications Device Class)
       'h021 : in_ep_data <= 2; // bInterfaceSubClass (Abstract Control Model)
-      'h022 : in_ep_data <= 1; // bInterfaceProtocol (AT Commands: V.250 etc)
+      'h022 : in_ep_data <= 0; // bInterfaceProtocol (0 = ?, 1 = AT Commands: V.250 etc)
       'h023 : in_ep_data <= 0; // iInterface
 
       // CDC Header Functional Descriptor, CDC Spec 5.2.3.1, Table 26

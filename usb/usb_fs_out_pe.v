@@ -185,7 +185,7 @@ module usb_fs_out_pe #(
 
             GETTING_PKT : begin
 
-              if (ep_get_addr[ep_num][5:0] >= (ep_put_addr[ep_num][5:0] - 2)) begin
+              if (ep_get_addr[ep_num][5:0] >= (ep_put_addr[ep_num][5:0] - 6'H2)) begin
                 ep_state_next[ep_num] <= READY_FOR_PKT;
 
               end else begin
@@ -212,7 +212,7 @@ module usb_fs_out_pe #(
         if (ep_state_next[ep_num][1:0] == READY_FOR_PKT) begin
           ep_get_addr_next[ep_num][5:0] <= 0;
         end else if (ep_state_next[ep_num][1:0] == GETTING_PKT && out_ep_data_get[ep_num]) begin
-          ep_get_addr_next[ep_num][5:0] <= ep_get_addr[ep_num][5:0] + 1;
+          ep_get_addr_next[ep_num][5:0] <= ep_get_addr[ep_num][5:0] + 6'H1;
         end else begin
           ep_get_addr_next[ep_num][5:0] <= ep_get_addr[ep_num][5:0];
         end
@@ -232,7 +232,7 @@ module usb_fs_out_pe #(
 
 
       assign out_ep_data_avail[ep_num] =
-        (ep_get_addr[ep_num][5:0] < (ep_put_addr[ep_num][5:0] - 2)) &&
+        (ep_get_addr[ep_num][5:0] < (ep_put_addr[ep_num][5:0] - 6'H2)) &&
         (ep_state[ep_num][1:0] == GETTING_PKT);
 
 
@@ -396,7 +396,7 @@ module usb_fs_out_pe #(
           end
 
           if (!nak_out_transfer && rx_data_put) begin
-            ep_put_addr[current_endp][5:0] <= ep_put_addr[current_endp][5:0] + 1;
+            ep_put_addr[current_endp][5:0] <= ep_put_addr[current_endp][5:0] + 6'H1;
 
           end
         end
