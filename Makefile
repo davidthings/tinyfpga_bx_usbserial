@@ -46,7 +46,7 @@ $(PROJTOP).json: $(SRC)
 	yosys -q -p 'synth_ice40 -top $(PROJTOP) -json $@' $^
 
 %.asc: $(PIN_DEF) %.json
-	nextpnr-ice40 --$(DEVICE) --freq $(CLK_MHZ) --package $(PACKAGE) --pcf $(PIN_DEF) --json $*.json --asc $@
+	nextpnr-ice40 --$(DEVICE) --freq $(CLK_MHZ) --opt-timing --package $(PACKAGE) --pcf $(PIN_DEF) --json $*.json --asc $@
 
 gui: $(PIN_DEF) $(PROJTOP).json
 	nextpnr-ice40 --$(DEVICE) --package $(PACKAGE) --pcf $(PIN_DEF) --json $(PROJTOP).json --asc $(PROJTOP).asc --gui

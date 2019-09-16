@@ -42,7 +42,7 @@ module usbserial_tbx (
     wire       uart_in_valid;
     wire       uart_in_ready;
 
-    assign debug = { uart_in_valid, uart_in_ready, reset, clk_48mhz };
+    // assign debug = { uart_in_valid, uart_in_ready, reset, clk_48mhz };
 
     wire usb_p_tx;
     wire usb_n_tx;
