@@ -75,6 +75,18 @@ The file `usb_uart_ecp5.v` is the wrapper that connects the ECP5 bidirectional I
 
 ![](ecp5_usb_serial.jpeg)
 
+The Eval board has one of those ubiquitous FTDI FT2232H chips for programming and IO, but the second channel is wired for I2C out of the box.  To activate the UART side (which requires a UART on the FPGA!) a couple of modifications need to be made to the board.
+
+First The FTDI has to be told that the protocol it should run on the B channel is UART. This means getting into FT Prog (Windows only, annoyingly) and setting the hardware setting to UART. This has the effect that when the chip powers up, it knows it should present as a UART (not a FIFO which is the default, and unsupported by the hardware).
+
+Then connect the pads at each of R34 and R35 to connect the FTDI with the ECP5. They are shown as Do Not Insert 0 ohm resistors on the schematic.  These lines are connected as I2C to several places by default, but only one connection is populated, FPGA lines (E6 D7). If they are left as inputs (high impedance) they don't disturb anything.
+
+With R34 and R35 nicely bridged the FTDI.TX -> FPGA.RX line works, which is easily verified by piping the whole incoming char to the 8-leds. Also easy to see if you have baud rate issues here.
+
+Finally, the FTDI when in UART mode wants to make a third line (FTDI pin 40) an RTS signal. That signal which is connected to the FTDI receiver (pin39) via a 0 ohm resistor kills all (FPGA TX -> FTDI RX) traffic. Removing R24 solves this.
+
+It would be fun to see how many USB ports could be added to this board.
+
 **Interface**
 
 The interface to the code looks like the following:
