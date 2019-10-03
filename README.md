@@ -67,6 +67,14 @@ In contrast to the appearance of a 14% occupied iCE40, here's a 2% occupied Xili
 
 The wrapper code is included here and can easily be included in Xilinx 7 code that need a soft USB port, but the files for the above example are part of another to be soon released project.  The present experiment was performed in Xilinx's Titanic dev environment, [Vivado](https://www.xilinx.com/products/design-tools/vivado.html), but it might work in the open source [Project Xray](https://symbiflow.readthedocs.io/projects/prjxray/en/latest/).
 
+**Another Aside - ECP 5**
+
+Some experimentation with the ECP5 Evaluation Board reveals that it too will run this code.  In the shot below, we see the new working USB port on the standard Eval board's Pmod connector.  A second, hand wired Pmod connector is visible behind although not in use.
+
+The file `usb_uart_ecp5.v` is the wrapper that connects the ECP5 bidirectional IO primitive into the code.
+
+![](ecp5_usb_serial.jpeg)
+
 **Interface**
 
 The interface to the code looks like the following:
