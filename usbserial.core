@@ -1,0 +1,76 @@
+CAPI=2:
+
+name : ::usbserial
+
+filesets:
+  rtl:
+    files:
+      - usb/edge_detect.v
+      - usb/serial.v
+      - usb/usb_fs_in_arb.v
+      - usb/usb_fs_in_pe.v
+      - usb/usb_fs_out_arb.v
+      - usb/usb_fs_out_pe.v
+      - usb/usb_fs_pe.v
+      - usb/usb_fs_rx.v
+      - usb/usb_fs_tx_mux.v
+      - usb/usb_fs_tx.v
+      - usb/usb_reset_det.v
+      - usb/usb_serial_ctrl_ep.v
+      - usb/usb_uart_bridge_ep.v
+      - usb/usb_uart_core.v
+    file_type : verilogSource
+
+  generic: {files: [usb/usb_uart.v     : {file_type : verilogSource}]}
+  ecp5 :   {files: [usb/usb_uart_ecp5.v: {file_type : verilogSource}]}
+  ice40:   {files: [usb/usb_uart_i40.v : {file_type : verilogSource}]}
+
+  tinyfpga_bx:
+    files:
+      - usbserial_tbx.v : {file_type : verilogSource}
+      - pins.pcf: {file_type : PCF}
+    depend: [fusesoc:utils:generators]
+
+targets:
+  default:
+    filesets: [rtl]
+
+  lint:
+    default_tool : verilator
+    description: Lint check core with Verilator
+    filesets: [rtl, generic]
+    tools:
+      verilator:
+        mode : lint-only
+    toplevel: usb_uart
+
+  synth:
+    default_tool: icestorm
+    description: Run synthesis for resource/timing analysis
+    filesets:
+      - rtl
+      - "tool_icestorm? (ice40)"
+      - "!tool_icestorm?   (generic)"
+    tools:
+      icestorm: {pnr : none}
+      vivado: {pnr : none}
+    toplevel: usb_uart
+
+  tinyfpga_bx:
+    default_tool: icestorm
+    description: Build for TinyFPGA BX
+    filesets: [rtl, ice40, tinyfpga_bx]
+    generate: [tinyfpga_bx_pll]
+    tools:
+      icestorm:
+        pnr: next
+        nextpnr_options: [--freq, 48, --lp8k, --opt-timing, --package, cm81]
+    toplevel: usbserial_tbx
+
+generate:
+  tinyfpga_bx_pll:
+    generator: icepll
+    parameters:
+      freq_in  : 16
+      freq_out : 48
+      module: true
