@@ -291,6 +291,10 @@ Please feel free to suggest fixes / improvements / changes.
 
 ## Fixed Issues
 
+**Removed Extra Endpoint**
+
+There was an extra unused endpoint burried in the code.  Remving it results 2% less LUT use, and improves the chances of a design passing timing.  Thanks very much to OlofKindren for taking the time to understand this code and post the PR.
+
 **Design Passing Timing**
 
 Originally some long constants were creating very long carry chains.  The code could never be made to pass at 48MHz.  This was dangerous since some parts under some conditions might not work.  Now it does pass!
