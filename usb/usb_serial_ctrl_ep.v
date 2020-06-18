@@ -103,9 +103,11 @@ module usb_serial_ctrl_ep #(
   reg [7:0] bytes_sent = 0;
   reg [6:0] rom_length = 0;
 
+  wire wLength_is_large = |wLength[15:7]; // 15-7 bits because rom_length is only 7 bits wide
+
   wire all_data_sent =
     (bytes_sent >= rom_length) ||
-    (bytes_sent >= wLength[7:0]); // save it from the full 16b
+    (!wLength_is_large && bytes_sent >= wLength[7:0]); // if the requested wLength is large, we only send rom_length bytes
 
   wire more_data_to_send =
     !all_data_sent;
