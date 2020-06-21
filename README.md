@@ -4,7 +4,7 @@
 
 ## Origins
 
-Luke Valenti's USB module, as adapted by Lawrie Griffiths and others.  Luke's code was created with the purpose of providing a "bit banged" USB port to SPI bridge for his (awesome) TinyFPGA boards.
+Luke Valenty's USB module, as adapted by Lawrie Griffiths and others.  Luke's code was created with the purpose of providing a "bit banged" USB port to SPI bridge for his (awesome) TinyFPGA boards.
 
 The original is here - https://github.com/tinyfpga/TinyFPGA-Bootloader
 
